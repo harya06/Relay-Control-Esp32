@@ -1,0 +1,292 @@
+<!DOCTYPE html>
+<html lang="id">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>Konfigurasi - ESP32</title>
+    <link rel="stylesheet" href="/style.css">
+    <style>
+        .password-input-wrapper {
+            position: relative;
+        }
+        .password-toggle {
+            position: absolute;
+            right: 10px;
+            top: 50%;
+            transform: translateY(-50%);
+            background: none;
+            border: none;
+            cursor: pointer;
+            font-size: 1.2rem;
+            color: var(--text-secondary);
+            padding: 0.5rem;
+        }
+        .password-toggle:hover {
+            color: var(--text-primary);
+        }
+    </style>
+</head>
+<body>
+    <nav class="navbar">
+        <div class="nav-brand">
+            <span>⚙️ ESP32 Config</span>
+        </div>
+        <div class="nav-actions">
+            <a href="/dashboard" class="btn-secondary">← Kembali</a>
+        </div>
+    </nav>
+    
+    <main class="container">
+        <div class="page-header">
+            <h1>⚙️ Konfigurasi Sistem</h1>
+            <p>Pilih mode komunikasi dan atur koneksi</p>
+        </div>
+        
+        <div class="config-container">
+            <form id="configForm">
+                <!-- WiFi Settings -->
+                <div class="config-section">
+                    <h2>📡 WiFi Settings</h2>
+                    <div class="input-group">
+                        <label for="wifiSSID">SSID</label>
+                        <input type="text" id="wifiSSID" placeholder="Nama WiFi" autocomplete="off">
+                    </div>
+                    <div class="input-group">
+                        <label for="wifiPassword">Password</label>
+                        <div class="password-input-wrapper">
+                            <input type="password" id="wifiPassword" placeholder="Password WiFi" autocomplete="new-password">
+                            <button type="button" class="password-toggle" onclick="togglePassword('wifiPassword')">👁️</button>
+                        </div>
+                    </div>
+                </div>
+                
+                <!-- Communication Mode -->
+                <div class="config-section">
+                    <h2>📊 Mode Komunikasi</h2>
+                    <p class="config-note">
+                        ⚡ <strong>Hanya satu mode yang akan aktif</strong><br>
+                        Mode dapat diubah kapan saja via web, serial, atau remote command
+                    </p>
+                    
+                    <div class="input-group">
+                        <div class="radio-group">
+                            <label class="radio-label">
+                                <input type="radio" name="commMode" value="0">
+                                <div class="radio-content">
+                                    <div class="radio-header">
+                                        <span class="radio-icon">📡</span>
+                                        <span class="radio-title">MQTT Mode</span>
+                                    </div>
+                                    <small class="radio-desc">
+                                        Untuk integrasi smart home (Home Assistant, Node-RED, IoT platform)
+                                    </small>
+                                    <div class="radio-features">
+                                        <span class="feature-tag">✓ Publish/Subscribe</span>
+                                        <span class="feature-tag">✓ QoS Support</span>
+                                        <span class="feature-tag">✓ Retained Messages</span>
+                                    </div>
+                                </div>
+                            </label>
+                            
+                            <label class="radio-label">
+                                <input type="radio" name="commMode" value="1" checked>
+                                <div class="radio-content">
+                                    <div class="radio-header">
+                                        <span class="radio-icon">🔌</span>
+                                        <span class="radio-title">WebSocket Mode</span>
+                                    </div>
+                                    <small class="radio-desc">
+                                        Untuk koneksi real-time ke WebSocket server custom (Default)
+                                    </small>
+                                    <div class="radio-features">
+                                        <span class="feature-tag">✓ Real-time</span>
+                                        <span class="feature-tag">✓ Bi-directional</span>
+                                        <span class="feature-tag">✓ Low Latency</span>
+                                    </div>
+                                </div>
+                            </label>
+                        </div>
+                    </div>
+                </div>
+                
+                <!-- Server Settings -->
+                <div class="config-section">
+                    <h2 id="serverTitle">🌐 Network Broker Settings</h2>
+                    <p class="config-note" id="serverNote">
+                        Konfigurasi untuk koneksi ke broker eksternal
+                    </p>
+                    
+                    <div class="input-group">
+                        <label for="serverIP">
+                            <span id="labelServerIP">Server IP/Domain</span>
+                            <small id="hintServerIP" class="label-hint">MQTT: Broker address | WebSocket: Server address</small>
+                        </label>
+                        <input type="text" id="serverIP" placeholder="broker.hivemq.com atau 192.168.1.100" autocomplete="off">
+                    </div>
+                    
+                    <div class="input-row">
+                        <div class="input-group">
+                            <label for="serverPort">
+                                Port
+                                <small class="label-hint">MQTT: 1883 | WS: 80/443</small>
+                            </label>
+                            <input type="number" id="serverPort" value="80" placeholder="80">
+                        </div>
+                        <div class="input-group">
+                            <label for="serverPath">
+                                Path/Topic
+                                <small class="label-hint" id="hintPath">MQTT: Topic | WS: Path</small>
+                            </label>
+                            <input type="text" id="serverPath" placeholder="/ws" autocomplete="off">
+                        </div>
+                    </div>
+                    
+                    <div class="input-group">
+                        <label for="serverToken">
+                            Token/Password (opsional)
+                            <small class="label-hint">Authentication credentials</small>
+                        </label>
+                        <div class="password-input-wrapper">
+                            <input type="password" id="serverToken" placeholder="Auth token atau password" autocomplete="new-password">
+                            <button type="button" class="password-toggle" onclick="togglePassword('serverToken')">👁️</button>
+                        </div>
+                    </div>
+                </div>
+                
+                <!-- Web Login -->
+                <div class="config-section">
+                    <h2>🔐 Web Login</h2>
+                    <div class="input-group">
+                        <label for="webUsername">Username</label>
+                        <input type="text" id="webUsername" placeholder="admin" autocomplete="username">
+                    </div>
+                    <div class="input-group">
+                        <label for="webPassword">
+                            Password Baru
+                            <small class="label-hint">Kosongkan jika tidak ingin mengubah</small>
+                        </label>
+                        <div class="password-input-wrapper">
+                            <input type="password" id="webPassword" placeholder="Password baru" autocomplete="new-password">
+                            <button type="button" class="password-toggle" onclick="togglePassword('webPassword')">👁️</button>
+                        </div>
+                    </div>
+                </div>
+                
+                <div class="config-actions">
+                    <button type="button" onclick="location.href='/dashboard'" class="btn-secondary">
+                        ✕ Batal
+                    </button>
+                    <button type="submit" class="btn-primary">
+                        💾 Simpan & Restart
+                    </button>
+                </div>
+            </form>
+        </div>
+    </main>
+    
+    <script>
+        // Toggle password visibility
+        function togglePassword(inputId) {
+            const input = document.getElementById(inputId);
+            const button = input.nextElementSibling;
+            
+            if (input.type === 'password') {
+                input.type = 'text';
+                button.textContent = '🙈';
+            } else {
+                input.type = 'password';
+                button.textContent = '👁️';
+            }
+        }
+        
+        // Update UI berdasarkan mode yang dipilih
+        document.querySelectorAll('input[name="commMode"]').forEach(radio => {
+            radio.addEventListener('change', function() {
+                const isMQTT = this.value === '0';
+                
+                document.getElementById('serverTitle').innerHTML = isMQTT 
+                    ? '🌐 Network Broker Settings (MQTT)' 
+                    : '🌐 Network Broker Settings (WebSocket)';
+                
+                document.getElementById('serverNote').innerHTML = isMQTT
+                    ? '📡 Konfigurasi untuk koneksi ke MQTT Broker'
+                    : '🔌 Konfigurasi untuk koneksi ke WebSocket Server';
+                
+                document.getElementById('serverPort').value = isMQTT ? '1883' : '80';
+                document.getElementById('serverPath').placeholder = isMQTT 
+                    ? 'esp32/outputs' 
+                    : '/ws';
+                
+                document.getElementById('hintPath').textContent = isMQTT
+                    ? 'MQTT Topic name'
+                    : 'WebSocket path (misal: /ws)';
+            });
+        });
+        
+        // Load config
+        async function loadConfig() {
+            try {
+                const response = await fetch('/api/config');
+                const config = await response.json();
+                
+                document.getElementById('wifiSSID').value = config.wifiSSID || '';
+                document.getElementById('serverIP').value = config.serverIP || '';
+                document.getElementById('serverPort').value = config.serverPort || 80;
+                document.getElementById('serverPath').value = config.serverPath || '/ws';
+                document.getElementById('serverToken').value = config.serverToken || '';
+                document.getElementById('webUsername').value = config.webUsername || 'admin';
+                
+                const commMode = config.commMode !== undefined ? config.commMode : 1; // Default WS
+                const radio = document.querySelector(`input[name="commMode"][value="${commMode}"]`);
+                if (radio) {
+                    radio.checked = true;
+                    radio.dispatchEvent(new Event('change'));
+                }
+            } catch (error) {
+                console.error('Error loading config:', error);
+                alert('Gagal memuat konfigurasi!');
+            }
+        }
+        
+        // Save config
+        document.getElementById('configForm').addEventListener('submit', async (e) => {
+            e.preventDefault();
+            
+            const commMode = parseInt(document.querySelector('input[name="commMode"]:checked').value);
+            
+            const config = {
+                wifiSSID: document.getElementById('wifiSSID').value,
+                wifiPassword: document.getElementById('wifiPassword').value,
+                serverIP: document.getElementById('serverIP').value,
+                serverPort: parseInt(document.getElementById('serverPort').value),
+                serverPath: document.getElementById('serverPath').value,
+                serverToken: document.getElementById('serverToken').value,
+                webUsername: document.getElementById('webUsername').value,
+                webPassword: document.getElementById('webPassword').value,
+                commMode: commMode
+            };
+            
+            if (confirm('Simpan konfigurasi dan restart ESP32?')) {
+                try {
+                    const response = await fetch('/api/config', {
+                        method: 'POST',
+                        headers: {'Content-Type': 'application/json'},
+                        body: JSON.stringify(config)
+                    });
+                    
+                    if (response.ok) {
+                        alert('✓ Konfigurasi disimpan!\n\nESP32 akan restart dalam 3 detik...');
+                        setTimeout(() => window.location.href = '/', 3000);
+                    } else {
+                        alert('✗ Gagal menyimpan konfigurasi!');
+                    }
+                } catch (error) {
+                    alert('✗ Error: ' + error.message);
+                }
+            }
+        });
+        
+        loadConfig();
+    </script>
+</body>
+</html>

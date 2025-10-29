@@ -1,0 +1,153 @@
+<!DOCTYPE html>
+<html lang="id">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>Dashboard - ESP32 Control</title>
+    <link rel="stylesheet" href="/style.css">
+</head>
+<body>
+    <nav class="navbar">
+        <div class="nav-brand">
+            <svg class="nav-icon" viewBox="0 0 24 24" fill="none" stroke="currentColor">
+                <path d="M12 2L2 7l10 5 10-5-10-5zM2 17l10 5 10-5M2 12l10 5 10-5" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"/>
+            </svg>
+            <span>ESP32 Control</span>
+        </div>
+        
+        <div class="nav-status">
+            <div class="status-indicator">
+                <span class="status-dot" id="wifiStatus"></span>
+                <span>WiFi</span>
+            </div>
+            <div class="status-indicator">
+                <span class="status-dot" id="remoteStatus"></span>
+                <span id="remoteLabel">Remote</span>
+            </div>
+            <div class="status-indicator mode-badge" id="modeBadge">
+                <span id="modeText">WS</span>
+            </div>
+        </div>
+        
+        <div class="nav-actions">
+            <button onclick="switchModeWeb()" class="btn-mode" id="btnSwitchMode" title="Switch Communication Mode">
+                🔄 <span id="switchModeText">Switch to MQTT</span>
+            </button>
+            <a href="/config" class="btn-secondary">⚙️ Config</a>
+            <button onclick="logout()" class="btn-secondary">🚪 Logout</button>
+        </div>
+    </nav>
+    
+    <main class="container">
+        <div class="page-header">
+            <div style="display: flex; justify-content: space-between; align-items: center; flex-wrap: wrap; gap: 1rem;">
+                <div>
+                    <h1>Output Control Dashboard</h1>
+                    <p>Kontrol 20 output secara real-time | Mode: <span id="currentMode" class="mode-text">WebSocket</span></p>
+                </div>
+                <div style="display: flex; gap: 0.5rem; flex-wrap: wrap;">
+                    <button onclick="allOutputsOn()" class="btn-success">
+                        ⚡ Semua ON
+                    </button>
+                    <button onclick="allOutputsOff()" class="btn-danger">
+                        ⏸ Semua OFF
+                    </button>
+                    <button onclick="openSetAllModal()" class="btn-primary">
+                        ⚙️ Set All Interval
+                    </button>
+                </div>
+            </div>
+        </div>
+        
+        <div class="controls-grid" id="outputsGrid">
+            <!-- Output cards akan di-generate oleh JavaScript -->
+        </div>
+    </main>
+    
+    <!-- Modal Edit Single Output -->
+    <div id="editModal" class="modal">
+        <div class="modal-content">
+            <div class="modal-header">
+                <h2>Edit Output <span id="modalOutputName"></span></h2>
+                <button class="modal-close" onclick="closeModal('editModal')">&times;</button>
+            </div>
+            <div class="modal-body">
+                <div class="input-group">
+                    <label for="outputName">Nama Output</label>
+                    <input type="text" id="outputName" placeholder="Contoh: Lampu Ruang Tamu">
+                </div>
+                
+                <div class="input-group">
+                    <label>
+                        <input type="checkbox" id="autoMode">
+                        Mode Otomatis (Auto ON/OFF)
+                    </label>
+                </div>
+                
+                <div class="input-row">
+                    <div class="input-group">
+                        <label for="intervalOn">Interval ON (detik)</label>
+                        <input type="number" id="intervalOn" min="1" value="5">
+                    </div>
+                    
+                    <div class="input-group">
+                        <label for="intervalOff">Interval OFF (detik)</label>
+                        <input type="number" id="intervalOff" min="1" value="5">
+                    </div>
+                </div>
+            </div>
+            <div class="modal-footer">
+                <button onclick="closeModal('editModal')" class="btn-secondary">Batal</button>
+                <button onclick="saveOutput()" class="btn-primary">Simpan</button>
+            </div>
+        </div>
+    </div>
+    
+    <!-- Modal Set All Interval -->
+    <div id="setAllModal" class="modal">
+        <div class="modal-content">
+            <div class="modal-header">
+                <h2>⚡ Set Interval Semua Output</h2>
+                <button class="modal-close" onclick="closeModal('setAllModal')">&times;</button>
+            </div>
+            <div class="modal-body">
+                <p class="config-note">
+                    ⚡ Atur interval untuk semua 20 output sekaligus
+                </p>
+                
+                <div class="input-row">
+                    <div class="input-group">
+                        <label for="allIntervalOn">Interval ON (detik)</label>
+                        <input type="number" id="allIntervalOn" min="1" value="5">
+                    </div>
+                    
+                    <div class="input-group">
+                        <label for="allIntervalOff">Interval OFF (detik)</label>
+                        <input type="number" id="allIntervalOff" min="1" value="5">
+                    </div>
+                </div>
+                
+                <div class="input-group">
+                    <label>
+                        <input type="checkbox" id="allAutoMode">
+                        Aktifkan Auto Mode untuk semua output
+                    </label>
+                </div>
+                
+                <div class="input-group">
+                    <label>
+                        <input type="checkbox" id="turnOnAll">
+                        Nyalakan semua output sekaligus setelah set
+                    </label>
+                </div>
+            </div>
+            <div class="modal-footer">
+                <button onclick="closeModal('setAllModal')" class="btn-secondary">Batal</button>
+                <button onclick="setAllInterval()" class="btn-primary">Terapkan ke Semua</button>
+            </div>
+        </div>
+    </div>
+    
+    <script src="/script.js"></script>
+</body>
+</html>
