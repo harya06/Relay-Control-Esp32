@@ -470,6 +470,16 @@ body {
     gap: 1rem;
 }
 
+.toggle-counter-display {
+  font-size: 1.25rem;
+  font-weight: 600;
+  color: var(--text-primary);
+  background: var(--bg-color);
+  padding: 0.75rem;
+  border-radius: var(--radius-md);
+  text-align: center;
+}
+
 /* ==================== LOGIN PAGE ==================== */
 .login-page {
     display: flex;

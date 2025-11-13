@@ -246,6 +246,11 @@ function editOutput(id) {
     document.getElementById('intervalOn').value = output.intervalOn || 5;
     document.getElementById('intervalOff').value = output.intervalOff || 5;
     document.getElementById('autoMode').checked = output.autoMode || false;
+    document.getElementById('maxToggles').value = output.maxToggles || 0;
+
+    const maxDisplay = output.maxToggles > 0 ? output.maxToggles : '∞';
+    document.getElementById('currentTogglesDisplay').textContent = 
+    `${output.currentToggles || 0} / ${maxDisplay}`;
     
     openModal('editModal');
 }
@@ -257,6 +262,7 @@ async function saveOutput() {
     const intervalOn = parseInt(document.getElementById('intervalOn').value);
     const intervalOff = parseInt(document.getElementById('intervalOff').value);
     const autoMode = document.getElementById('autoMode').checked;
+    const maxToggles = parseInt(document.getElementById('maxToggles').value);
     
     const currentOutput = outputs[currentEditId] || createDefaultOutput(currentEditId);
     
@@ -287,10 +293,47 @@ async function saveOutput() {
             autoMode: autoMode
         });
     }
+
+    // Cek jika nilai maxToggles berubah
+    if (maxToggles !== (currentOutput.maxToggles || 0)) {
+    await apiRequest('/api/output', 'POST', {
+      action: 'setToggleLimit',
+      id: currentEditId,
+      limit: maxToggles
+    });
+    // Counter direset oleh backend secara otomatis
+  }
     
     closeModal('editModal');
     showToast('Pengaturan disimpan!');
     setTimeout(fetchStatus, 100);
+}
+
+async function resetCounter() {
+  if (currentEditId === null) return;
+  
+  const outputName = outputs[currentEditId] ? outputs[currentEditId].name : `Output ${currentEditId + 1}`;
+
+  if (confirm(`Reset meteran perpindahan untuk ${outputName}?`)) {
+    const result = await apiRequest('/api/output', 'POST', {
+      action: 'resetToggleCounter',
+      id: currentEditId
+    });
+
+    if (result && result.success) {
+      showToast('Meteran berhasil di-reset!', 'success');
+      
+      // Update tampilan di modal
+      const maxDisplay = document.getElementById('maxToggles').value;
+      document.getElementById('currentTogglesDisplay').textContent = 
+        `0 / ${maxDisplay > 0 ? maxDisplay : '∞'}`;
+      
+      // Ambil status baru (penting untuk update data di 'outputs' array)
+      setTimeout(fetchStatus, 100);
+    } else {
+      showToast('Gagal reset meteran!', 'error');
+    }
+  }
 }
 
 // ==================== KONTROL SEMUA OUTPUT ====================
@@ -391,72 +434,95 @@ function openSetAllModal() {
 }
 
 async function setAllInterval() {
-    const intervalOn = parseInt(document.getElementById('allIntervalOn').value);
-    const intervalOff = parseInt(document.getElementById('allIntervalOff').value);
-    const autoMode = document.getElementById('allAutoMode').checked;
-    const turnOnAll = document.getElementById('turnOnAll').checked;
+  const intervalOn = parseInt(document.getElementById('allIntervalOn').value);
+  const intervalOff = parseInt(document.getElementById('allIntervalOff').value);
+
+  const maxToggles = parseInt(document.getElementById('allMaxToggles').value);
+  
+  const autoMode = document.getElementById('allAutoMode').checked;
+  const turnOnAll = document.getElementById('turnOnAll').checked;
+
+  let confirmText = `Terapkan ke semua ${TOTAL_OUTPUTS} output:\n`;
+  confirmText += `  • Interval ON: ${intervalOn}s\n`;
+  confirmText += `  • Interval OFF: ${intervalOff}s\n`; 
+
+  if (maxToggles > 0) {
+    confirmText += `  • Batasan: ${maxToggles} kali pindah (Meteran akan di-reset)\n`;
+  } else {
+    confirmText += `  • Batasan: Tak Terbatas (Meteran akan di-reset)\n`;
+  }
+
+  if (autoMode) confirmText += '  ✓ Aktifkan auto mode\n';
+  if (turnOnAll) confirmText += '  ✓ Nyalakan semua output\n';
+  
+  confirmText += '\nLanjutkan?';
+  
+  if (confirm(confirmText)) {
+    showToast(`Menerapkan ke ${TOTAL_OUTPUTS} output...`, 'info');
     
-    let confirmText = `Terapkan interval ON:${intervalOn}s OFF:${intervalOff}s ke semua ${TOTAL_OUTPUTS} output`;
-    if (autoMode) confirmText += '\n✓ Aktifkan auto mode';
-    if (turnOnAll) confirmText += '\n✓ Nyalakan semua output';
-    confirmText += '?';
-    
-    if (confirm(confirmText)) {
-        showToast(`Menerapkan ke ${TOTAL_OUTPUTS} output...`, 'info');
-        
-        // 1. Set interval untuk semua output (parallel)
-        console.log(`Setting interval for ${TOTAL_OUTPUTS} outputs...`);
-        const intervalPromises = [];
-        for (let i = 0; i < TOTAL_OUTPUTS; i++) {
-            intervalPromises.push(
-                apiRequest('/api/output', 'POST', {
-                    action: 'setInterval',
-                    id: i,
-                    intervalOn: intervalOn,
-                    intervalOff: intervalOff
-                })
-            );
-        }
-        
-        await Promise.all(intervalPromises);
-        console.log('✓ Intervals set for all outputs');
-        
-        // 2. Set auto mode (parallel)
-        console.log(`Setting auto mode to ${autoMode} for ${TOTAL_OUTPUTS} outputs...`);
-        const autoPromises = [];
-        for (let i = 0; i < TOTAL_OUTPUTS; i++) {
-            autoPromises.push(
-                apiRequest('/api/output', 'POST', {
-                    action: 'setAutoMode',
-                    id: i,
-                    autoMode: autoMode
-                })
-            );
-        }
-        await Promise.all(autoPromises);
-        console.log('✓ Auto mode set for all outputs');
-        
-        // 3. Nyalakan semua jika dicentang (parallel)
-        if (turnOnAll) {
-            console.log(`Turning ON ${TOTAL_OUTPUTS} outputs...`);
-            const onPromises = [];
-            for (let i = 0; i < TOTAL_OUTPUTS; i++) {
-                onPromises.push(
-                    apiRequest('/api/output', 'POST', {
-                        action: 'setState',
-                        id: i,
-                        state: true
-                    })
-                );
-            }
-            await Promise.all(onPromises);
-            console.log('✓ All outputs turned ON');
-        }
-        
-        closeModal('setAllModal');
-        showToast(`✓ Interval diterapkan ke ${TOTAL_OUTPUTS} output!`, 'success');
-        setTimeout(fetchStatus, 500);
+    console.log(`Setting toggle limit to ${maxToggles} for ${TOTAL_OUTPUTS} outputs...`);
+    const limitPromises = [];
+    for (let i = 0; i < TOTAL_OUTPUTS; i++) {
+      limitPromises.push(
+        apiRequest('/api/output', 'POST', {
+          action: 'setToggleLimit',
+          id: i,
+          limit: maxToggles
+        })
+      );
     }
+    await Promise.all(limitPromises);
+    console.log('✓ Toggle limits set for all outputs (counters reset)');
+    
+    console.log(`Setting interval for ${TOTAL_OUTPUTS} outputs...`);
+    const intervalPromises = [];
+    for (let i = 0; i < TOTAL_OUTPUTS; i++) {
+      intervalPromises.push(
+        apiRequest('/api/output', 'POST', {
+          action: 'setInterval',
+          id: i,
+          intervalOn: intervalOn,
+          intervalOff: intervalOff
+        })
+      );
+    }
+    await Promise.all(intervalPromises);
+    console.log('✓ Intervals set for all outputs');
+    
+    console.log(`Setting auto mode to ${autoMode} for ${TOTAL_OUTPUTS} outputs...`);
+    const autoPromises = [];
+    for (let i = 0; i < TOTAL_OUTPUTS; i++) {
+      autoPromises.push(
+        apiRequest('/api/output', 'POST', {
+          action: 'setAutoMode',
+          id: i,
+          autoMode: autoMode
+        })
+      );
+    }
+    await Promise.all(autoPromises);
+    console.log('✓ Auto mode set for all outputs');
+    
+    if (turnOnAll) {
+      console.log(`Turning ON ${TOTAL_OUTPUTS} outputs...`);
+      const onPromises = [];
+      for (let i = 0; i < TOTAL_OUTPUTS; i++) {
+        onPromises.push(
+          apiRequest('/api/output', 'POST', {
+            action: 'setState',
+            id: i,
+            state: true
+          })
+        );
+      }
+      await Promise.all(onPromises);
+      console.log('✓ All outputs turned ON');
+    }
+    
+    closeModal('setAllModal');
+    showToast(`✓ Pengaturan massal diterapkan ke ${TOTAL_OUTPUTS} output!`, 'success');
+    setTimeout(fetchStatus, 500);
+  }
 }
 
 // ==================== MODAL CONTROLS ====================

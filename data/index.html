@@ -83,6 +83,22 @@
                         Mode Otomatis (Auto ON/OFF)
                     </label>
                 </div>
+
+                <div class="input-group">
+                    <label for="maxToggles">Batasan Perpindahan (0 = Tak Terbatas)</label>
+                        <input type="number" id="maxToggles" min="0" value="0" step="1">
+                        <small class="label-hint">Output akan terkunci setelah (n) kali perpindahan.</small>
+                </div>
+
+                <div class="input-group">
+                    <label>Meteran Perpindahan Saat Ini</label>
+                    <div id="currentTogglesDisplay" class="toggle-counter-display">
+                        0 / 0
+                    </div>
+                    <button type="button" class="btn-secondary" onclick="resetCounter()" style="margin-top: 0.5rem;">
+                        🔄 Reset Meteran
+                    </button>
+                </div>
                 
                 <div class="input-row">
                     <div class="input-group">
@@ -126,7 +142,15 @@
                         <input type="number" id="allIntervalOff" min="1" value="5">
                     </div>
                 </div>
-                
+
+                <div class="input-group">
+                    <label for="allMaxToggles">Batasan Perpindahan (0 = Tak Terbatas)</label>
+                    <input type="number" id="allMaxToggles" min="0" value="0" step="1">
+                    <small class="label-hint">
+                     Mengatur ini akan <strong>me-reset meteran</strong> semua output.
+                    </small>
+                </div>
+
                 <div class="input-group">
                     <label>
                         <input type="checkbox" id="allAutoMode">

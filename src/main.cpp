@@ -49,6 +49,8 @@ struct OutputChannel
   unsigned long intervalOff;
   unsigned long lastToggle;
   bool autoMode;
+  int maxToggles;
+  int currentToggles;
 };
 
 struct Config
@@ -95,9 +97,20 @@ WebSocketsClient wsClient;
 // ==================== GLOBAL VARIABLES ====================
 bool wifiConnected = false;
 bool remoteConnected = false;
+bool modeSwitching = false;
+bool lcdNeedsRedraw = true;
+bool isRemoteReconnecting = false;
+
 unsigned long lastRemotePublish = 0;
 unsigned long lastRemoteReconnect = 0;
-bool modeSwitching = false;
+unsigned long remoteDisconnectTime = 0;
+unsigned long lastLcdPageSwap = 0;
+
+int lcdOutputPage = 0;
+
+#define LCD_PAGES 5
+#define LCD_PAGE_SWAP_MS 2000 
+#define REMOTE_RECONNECT_TIMEOUT 15000
 
 // ==================== FORWARD DECLARATIONS ====================
 void updateLCD();
@@ -143,10 +156,10 @@ void initHardwarePins()
   pinMode(25, OUTPUT);
   pinMode(32, OUTPUT);
 
-  digitalWrite(4, LOW);
+  digitalWrite(4, LOW); 
   digitalWrite(17, LOW);
-  digitalWrite(25, LOW);
-  digitalWrite(32, LOW);
+  digitalWrite(25, HIGH);
+  digitalWrite(32, HIGH);
 
   // Init PCF8574 #1
   Serial.println("Initializing PCF1 pins...");
@@ -181,6 +194,23 @@ void setOutput(int channel, bool state)
     return;
   }
 
+  int outputIndex = channel - 1;
+
+  if (outputs[outputIndex].state == state)
+  {
+    Serial.printf("CH%02d: Sudah di state %s, tidak ada perpindahan.\n", channel, state ? "ON" : "OFF");
+    return;
+  }
+
+  if (outputs[outputIndex].maxToggles > 0)
+  {
+    if (outputs[outputIndex].currentToggles >= outputs[outputIndex].maxToggles)
+    {
+      Serial.printf("CH%02d: GAGAL! Batasan perpindahan (%d) telah tercapai.\n", channel, outputs[outputIndex].maxToggles);
+      return;
+    }
+  }
+
   ChannelMap ch = chMap[channel];
 
   bool writeSuccess = false;
@@ -189,10 +219,23 @@ void setOutput(int channel, bool state)
   {
   case IO_ESP:
   {
-    digitalWrite(ch.pin, state ? HIGH : LOW);
-    Serial.printf("CH%02d: ESP GPIO%02d = %s\n", channel, ch.pin, state ? "HIGH" : "LOW");
-    writeSuccess = true;
-    break;
+    if (ch.pin == 4 || ch.pin == 17)
+        {
+          digitalWrite(ch.pin, state ? HIGH : LOW);
+          Serial.printf("CH%02d: ESP GPIO%02d = %s (Normal)\n", channel, ch.pin, state ? "HIGH" : "LOW");
+          writeSuccess = true;
+        }
+        else if (ch.pin == 25 || ch.pin == 32)
+        {
+          digitalWrite(ch.pin, state ? LOW : HIGH);
+          Serial.printf("CH%02d: ESP GPIO%02d = %s (Inverted)\n", channel, ch.pin, state ? "LOW" : "HIGH");
+          writeSuccess = true;  
+        }
+        else
+        {
+          writeSuccess = false;
+        }
+        break;
   }
 
   case IO_PCF1:
@@ -230,8 +273,16 @@ void setOutput(int channel, bool state)
 
   if (writeSuccess)
   {
-    outputs[channel - 1].state = state;
-    outputs[channel - 1].lastToggle = millis();
+    outputs[outputIndex].state = state;
+    outputs[outputIndex].lastToggle = millis();
+    outputs[outputIndex].currentToggles++;
+
+    lcdNeedsRedraw = true;
+    lcdOutputPage = 0;
+    lastLcdPageSwap = millis();
+
+    Serial.printf("CH%02d: Perpindahan ke %d. Meteran: %d / %d\n", 
+                  channel, state, outputs[outputIndex].currentToggles, outputs[outputIndex].maxToggles);
   }
   else
   {
@@ -256,7 +307,6 @@ void initOutputs()
 bool loadConfig()
 {
   // ======== FORCE WEBSOCKET MODE ========
-  // Hapus file lama jika ada
   if (LittleFS.exists(CONFIG_FILE))
   {
     Serial.println("Found existing config.json");
@@ -291,7 +341,7 @@ bool loadConfig()
     config.wifiSSID = "";
     config.wifiPassword = "";
     config.serverIP = "";
-    config.serverPort = 80;
+    config.serverPort = 8080;
     config.serverPath = "/ws";
     config.serverToken = "";
     config.webUsername = "admin";
@@ -436,41 +486,56 @@ bool saveConfig()
 // ==================== LCD ====================
 void updateLCD()
 {
-  lcd.clear();
-  lcd.setCursor(0, 0);
+    lcd.clear();
 
-  if (wifiConnected)
-  {
-    lcd.print("WiFi: OK");
-  }
-  else
-  {
-    lcd.print("WiFi: AP");
-  }
+    if (remoteConnected)
+    {
+        
+        int startOutput = (lcdOutputPage * 4) + 1; 
+        
+        // --- BARIS 1 (Output +0, +1) ---
+        lcd.setCursor(0, 0);
+        for (int i = 0; i < 2; i++) { // 2 output per baris
+            int ch = startOutput + i;
+            if (ch <= TOTAL_OUTPUTS) {
+                // Format Anda: "Q10:0, " (7 karakter)
+                char buf[8]; // Butuh 8 untuk 7 karakter + null
+                sprintf(buf, "Q%d:%d, ", ch, outputs[ch-1].state ? 1 : 0);
+                lcd.print(buf);
+            }
+        }
+        
+        // --- BARIS 2 (Output +2, +3) ---
+        lcd.setCursor(0, 1);
+        for (int i = 2; i < 4; i++) { // 2 output per baris
+            int ch = startOutput + i;
+            if (ch <= TOTAL_OUTPUTS) {
+                char buf[8]; 
+                sprintf(buf, "Q%d:%d, ", ch, outputs[ch-1].state ? 1 : 0);
+                lcd.print(buf);
+            }
+        }
+    }
+    else
+    {
+        // === MODE OFFLINE: TAMPILKAN STATUS KONFIGURASI ===
+        lcd.setCursor(0, 0);
+        if (wifiConnected)
+        {
+            lcd.print("IP:");
+            lcd.print(WiFi.localIP().toString());
+        }
+        else
+        {
+            lcd.print("AP:");
+            lcd.print(WiFi.softAPIP().toString());
+        }
 
-  lcd.setCursor(0, 1);
-
-  if (config.commMode == MODE_MQTT)
-  {
-    lcd.print("MQTT: ");
-    lcd.print(remoteConnected ? "OK" : "--");
-  }
-  else
-  {
-    lcd.print("WS: ");
-    lcd.print(remoteConnected ? "OK" : "--");
-  }
-
-  int activeCount = 0;
-  for (int i = 0; i < TOTAL_OUTPUTS; i++)
-  {
-    if (outputs[i].state)
-      activeCount++;
-  }
-
-  lcd.setCursor(11, 1);
-  lcd.print("ON:");
-  lcd.print(activeCount);
+        lcd.setCursor(0, 1);
+        String mode = (config.commMode == MODE_MQTT) ? "MQTT" : "WS";
+        lcd.print(mode + ": ");
+        lcd.print("NOT CONNECTED");
+    }
 }
 
 // ==================== MODE SWITCHING ====================
@@ -557,7 +622,9 @@ String getStatusJSON()
     obj["intervalOn"] = outputs[i].intervalOn / 1000;
     obj["intervalOff"] = outputs[i].intervalOff / 1000;
     obj["autoMode"] = outputs[i].autoMode;
-    obj["autoMode"] = outputs[i].autoMode;
+    obj["maxToggles"] = outputs[i].maxToggles;
+    obj["currentToggles"] = outputs[i].currentToggles;
+
   }
 
   doc["wifiConnected"] = wifiConnected;
@@ -565,6 +632,22 @@ String getStatusJSON()
   doc["commMode"] = (int)config.commMode;
   doc["modeName"] = config.commMode == MODE_WEBSOCKET ? "MQTT" : "WebSocket";
   doc["totalOutputs"] = TOTAL_OUTPUTS;
+
+  String json;
+  serializeJson(doc, json);
+  return json;
+}
+
+// ==================== JSON HELPERS (REMOTE) ====================
+String getRemoteStatusJSON()
+{
+  StaticJsonDocument<512> doc;
+
+  for (int i = 0; i < TOTAL_OUTPUTS; i++)
+  {
+    String key = "O" + String(i + 1);
+    doc[key] = outputs[i].state ? "1" : "0";
+  }
 
   String json;
   serializeJson(doc, json);
@@ -684,7 +767,8 @@ void mqttPublish()
   if (!remoteConnected)
     return;
 
-  String json = getStatusJSON();
+  String json = getRemoteStatusJSON();
+
   mqttClient.publish(config.serverPath.c_str(), json.c_str());
   Serial.println("MQTT Published");
 }
@@ -715,6 +799,7 @@ void mqttReconnect()
   {
     Serial.println("OK");
     remoteConnected = true;
+    isRemoteReconnecting = false;
 
     // Subscribe to control topic
     String controlTopic = config.serverPath + "/control";
@@ -722,12 +807,19 @@ void mqttReconnect()
     Serial.printf("Subscribed to: %s\n", controlTopic.c_str());
 
     mqttPublish();
-    updateLCD();
+    lcdOutputPage = 0;
+    updateLCD(); 
+    lastLcdPageSwap = millis();
+    lcdNeedsRedraw = true;
   }
   else
   {
     Serial.printf("FAIL (rc=%d)\n", mqttClient.state());
     remoteConnected = false;
+    
+    updateLCD(); 
+    lastLcdPageSwap = millis();
+    lcdNeedsRedraw = true;
   }
 }
 
@@ -739,14 +831,30 @@ void wsEvent(WStype_t type, uint8_t *payload, size_t length)
   case WStype_DISCONNECTED:
     Serial.println("WS Disconnected");
     remoteConnected = false;
-    updateLCD();
+
+    if (wifiConnected && !isRemoteReconnecting) 
+    {
+      Serial.printf("WS: Memulai 15 detik percobaan reconnect...\n");
+      isRemoteReconnecting = true;
+      remoteDisconnectTime = millis();
+    }
+
+    updateLCD(); 
+    lastLcdPageSwap = millis();
+    lcdNeedsRedraw = true;
     break;
 
   case WStype_CONNECTED:
     Serial.printf("WS Connected to: %s\n", payload);
     remoteConnected = true;
+    isRemoteReconnecting = false;
+
     wsPublish();
-    updateLCD();
+
+    lcdOutputPage = 0;
+    updateLCD(); 
+    lastLcdPageSwap = millis();
+    lcdNeedsRedraw = true;
     break;
 
   case WStype_TEXT:
@@ -773,7 +881,8 @@ void wsPublish()
   if (!remoteConnected)
     return;
 
-  String json = getStatusJSON();
+  String json = getRemoteStatusJSON();
+
   wsClient.sendTXT(json);
   Serial.println("WS Published");
 }
@@ -963,6 +1072,29 @@ void handleSetOutput()
   {
     rebuildSyncGroups();
     server.send(200, "application/json", "{\"success\":true}");
+  }
+  else if (action == "setToggleLimit")
+  {
+    int id = doc["id"];
+    if (id >= 0 && id < TOTAL_OUTPUTS)
+    {
+      outputs[id].maxToggles = doc["limit"].as<int>();
+      outputs[id].currentToggles = 0; // Otomatis reset meteran saat set baru
+      Serial.printf("CH%02d: Batasan perpindahan diatur ke %d. Meteran direset.\n", id + 1, outputs[id].maxToggles);
+      server.send(200, "application/json", "{\"success\":true}");
+    }
+    else { server.send(400, "application/json", "{\"success\":false}"); }
+  }
+  else if (action == "resetToggleCounter")
+  {
+    int id = doc["id"];
+    if (id >= 0 && id < TOTAL_OUTPUTS)
+    {
+      outputs[id].currentToggles = 0;
+      Serial.printf("CH%02d: Meteran perpindahan direset.\n", id + 1);
+      server.send(200, "application/json", "{\"success\":true}");
+    }
+    else { server.send(400, "application/json", "{\"success\":false}"); }
   }
   else
   {
@@ -1549,32 +1681,98 @@ void loop()
   // Handle MQTT atau WebSocket
   if (config.commMode == MODE_MQTT)
   {
-    if (!mqttClient.connected())
+    if (mqttClient.connected())
     {
-      if (wifiConnected && config.serverIP.length() > 0)
+      mqttClient.loop();
+      isRemoteReconnecting = false;
+      
+      if (currentMillis - lastRemotePublish >= 5000)
       {
-        mqttReconnect();
+          mqttPublish();
+          lastRemotePublish = currentMillis;
       }
     }
     else
     {
-      mqttClient.loop();
-
-      if (currentMillis - lastRemotePublish >= 5000)
+      if (!wifiConnected || config.serverIP.length() == 0)
       {
-        mqttPublish();
-        lastRemotePublish = currentMillis;
+          isRemoteReconnecting = false;
+      }
+      else if (!isRemoteReconnecting)
+      {
+        Serial.println("MQTT Disconnected. Memulai 15 detik percobaan reconnect...");
+        isRemoteReconnecting = true;
+        remoteDisconnectTime = millis();
+      }
+      else
+      {
+        if (currentMillis - remoteDisconnectTime >= REMOTE_RECONNECT_TIMEOUT)
+        {
+          Serial.println("\nMQTT: Gagal reconnect selama 15 detik.");
+          Serial.println("Menghentikan percobaan STA dan pindah ke AP Mode.");
+          
+          isRemoteReconnecting = false;
+          mqttClient.disconnect(); 
+          
+          WiFi.disconnect();
+          WiFi.mode(WIFI_AP);
+          WiFi.softAP(AP_SSID, AP_PASSWORD);
+          wifiConnected = false;
+          
+          Serial.println("AP Mode Aktif. IP: " + WiFi.softAPIP().toString());
+          lcdNeedsRedraw = true; 
+        }
+        else
+        {
+          Serial.print(".");
+          mqttReconnect(); 
+        }
       }
     }
   }
   else
   {
-    wsClient.loop();
+    wsClient.loop(); 
 
-    if (remoteConnected && currentMillis - lastRemotePublish >= 5000)
+    if (remoteConnected)
     {
-      wsPublish();
-      lastRemotePublish = currentMillis;
+      isRemoteReconnecting = false; 
+      
+      if (currentMillis - lastRemotePublish >= 5000)
+      {
+        wsPublish();
+        lastRemotePublish = currentMillis;
+      }
+    }
+    else
+    {
+      if (!wifiConnected || config.serverIP.length() == 0)
+      {
+        isRemoteReconnecting = false; 
+      }
+      else if (isRemoteReconnecting)
+      {
+        if (currentMillis - remoteDisconnectTime >= REMOTE_RECONNECT_TIMEOUT)
+        {
+          Serial.println("\nWS: Gagal reconnect selama 15 detik.");
+          Serial.println("Menghentikan percobaan STA dan pindah ke AP Mode.");
+          
+          isRemoteReconnecting = false;
+          wsClient.disconnect();
+          
+          WiFi.disconnect();
+          WiFi.mode(WIFI_AP);
+          WiFi.softAP(AP_SSID, AP_PASSWORD);
+          wifiConnected = false;
+          
+          Serial.println("AP Mode Aktif. IP: " + WiFi.softAPIP().toString());
+          lcdNeedsRedraw = true; 
+        }
+        else
+        {
+          Serial.print(".");
+        }
+      }
     }
   }
 
@@ -1582,10 +1780,20 @@ void loop()
   processSyncGroups();
 
   // Update LCD
-  static unsigned long lastLcdUpdate = 0;
-  if (currentMillis - lastLcdUpdate >= 2000)
+  if (remoteConnected && (currentMillis - lastLcdPageSwap >= LCD_PAGE_SWAP_MS))
   {
-    updateLCD();
-    lastLcdUpdate = currentMillis;
+    lastLcdPageSwap = currentMillis;
+
+    lcdOutputPage++;
+    if (lcdOutputPage >= LCD_PAGES) {
+        lcdOutputPage = 0;
+    }
+    lcdNeedsRedraw = true;
+  }
+
+  if (lcdNeedsRedraw) 
+  {
+    lcdNeedsRedraw = false;
+    updateLCD(); 
   }
 }

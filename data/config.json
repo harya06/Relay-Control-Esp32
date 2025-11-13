@@ -1,0 +1,11 @@
+{
+  "wifiSSID": "Alaadiyaat",
+  "wifiPassword": "alaadiyaat25",
+  "serverIP": "192.168.0.101",
+  "serverPort": 8080,
+  "serverPath": "/ws",
+  "serverToken": "",
+  "webUsername": "admin",
+  "webPassword": "admin123",
+  "commMode": 1
+}
