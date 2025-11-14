@@ -112,6 +112,12 @@ int lcdOutputPage = 0;
 #define LCD_PAGE_SWAP_MS 2000 
 #define REMOTE_RECONNECT_TIMEOUT 15000
 
+// ========================== PIN I/O ==========================
+#define PIN_IO_ESP1 4
+#define PIN_IO_ESP2 17
+#define PIN_IO_ESP11 25
+#define PIN_IO_ESP12 32
+
 // ==================== FORWARD DECLARATIONS ====================
 void updateLCD();
 bool saveConfig();
@@ -126,40 +132,35 @@ void processSyncGroups();
 // ==================== CHANNEL MAPPING ====================
 void initChannelMap()
 {
-  chMap[1] = {IO_ESP, 4};
-  chMap[2] = {IO_ESP, 17};
-  chMap[3] = {IO_PCF1, 0};
-  chMap[4] = {IO_PCF1, 1};
-  chMap[5] = {IO_PCF1, 2};
-  chMap[6] = {IO_PCF1, 3};
-  chMap[7] = {IO_PCF1, 4};
-  chMap[8] = {IO_PCF1, 5};
-  chMap[9] = {IO_PCF1, 6};
-  chMap[10] = {IO_PCF1, 7};
-  chMap[11] = {IO_ESP, 25};
-  chMap[12] = {IO_ESP, 32};
-  chMap[13] = {IO_PCF2, 0};
-  chMap[14] = {IO_PCF2, 1};
-  chMap[15] = {IO_PCF2, 2};
-  chMap[16] = {IO_PCF2, 3};
-  chMap[17] = {IO_PCF2, 4};
-  chMap[18] = {IO_PCF2, 5};
-  chMap[19] = {IO_PCF2, 6};
-  chMap[20] = {IO_PCF2, 7};
+  chMap[1] = {IO_ESP, PIN_IO_ESP1};
+  chMap[2] = {IO_ESP, PIN_IO_ESP2};
+
+  for (uint8_t i = 0; i < 8; i++)
+  {
+    chMap[i + 3] = {IO_PCF1, i};
+  }
+
+  chMap[11] = {IO_ESP, PIN_IO_ESP11};
+  chMap[12] = {IO_ESP, PIN_IO_ESP12};
+
+  for (uint8_t i = 0; i < 8; i++)
+  {
+    chMap[i + 13] = {IO_PCF2, i};
+  }
 }
 
 // ==================== HARDWARE CONTROL ====================
 void initHardwarePins()
 {
-  pinMode(4, OUTPUT);
-  pinMode(17, OUTPUT);
-  pinMode(25, OUTPUT);
-  pinMode(32, OUTPUT);
+  pinMode(PIN_IO_ESP1, OUTPUT);
+  pinMode(PIN_IO_ESP2, OUTPUT);
+  pinMode(PIN_IO_ESP11, OUTPUT);
+  pinMode(PIN_IO_ESP12, OUTPUT);
 
-  digitalWrite(4, LOW); 
-  digitalWrite(17, LOW);
-  digitalWrite(25, HIGH);
-  digitalWrite(32, HIGH);
+  digitalWrite(PIN_IO_ESP1, LOW); 
+  digitalWrite(PIN_IO_ESP2, LOW);
+  digitalWrite(PIN_IO_ESP11, HIGH);
+  digitalWrite(PIN_IO_ESP12, HIGH);
 
   // Init PCF8574 #1
   Serial.println("Initializing PCF1 pins...");
@@ -219,13 +220,13 @@ void setOutput(int channel, bool state)
   {
   case IO_ESP:
   {
-    if (ch.pin == 4 || ch.pin == 17)
+    if (ch.pin == PIN_IO_ESP1 || ch.pin == PIN_IO_ESP2)
         {
           digitalWrite(ch.pin, state ? HIGH : LOW);
           Serial.printf("CH%02d: ESP GPIO%02d = %s (Normal)\n", channel, ch.pin, state ? "HIGH" : "LOW");
           writeSuccess = true;
         }
-        else if (ch.pin == 25 || ch.pin == 32)
+        else if (ch.pin == PIN_IO_ESP11 || ch.pin == PIN_IO_ESP12)
         {
           digitalWrite(ch.pin, state ? LOW : HIGH);
           Serial.printf("CH%02d: ESP GPIO%02d = %s (Inverted)\n", channel, ch.pin, state ? "LOW" : "HIGH");
@@ -318,17 +319,17 @@ bool loadConfig()
       DeserializationError error = deserializeJson(doc, file);
       file.close();
 
-      if (!error)
-      {
-        int mode = doc["commMode"] | 1;
+      // if (!error)
+      // {
+      //   int mode = doc["commMode"] | 1;
 
-        if (mode == 0)
-        {
-          Serial.println("OLD CONFIG WITH MQTT MODE DETECTED!");
-          Serial.println("Deleting old config...");
-          LittleFS.remove(CONFIG_FILE);
-        }
-      }
+      //   if (mode == 0)
+      //   {
+      //     Serial.println("OLD CONFIG WITH MQTT MODE DETECTED!");
+      //     Serial.println("Deleting old config...");
+      //     LittleFS.remove(CONFIG_FILE);
+      //   }
+      // }
     }
   }
   // =====================================
@@ -341,8 +342,8 @@ bool loadConfig()
     config.wifiSSID = "";
     config.wifiPassword = "";
     config.serverIP = "";
-    config.serverPort = 8080;
-    config.serverPath = "/ws";
+    config.serverPort;
+    config.serverPath = "";
     config.serverToken = "";
     config.webUsername = "admin";
     config.webPassword = "admin123";
@@ -369,15 +370,15 @@ bool loadConfig()
     config.wifiSSID = "";
     config.wifiPassword = "";
     config.serverIP = "";
-    config.serverPort = 80;
-    config.serverPath = "/ws";
+    config.serverPort;
+    config.serverPath = "";
     config.serverToken = "";
     config.webUsername = "admin";
     config.webPassword = "admin123";
     config.commMode = MODE_WEBSOCKET;
     saveConfig();
 
-    return false; // ← PASTIKAN ADA RETURN
+    return false;
   }
 
   String fileContent = file.readString();
@@ -402,8 +403,8 @@ bool loadConfig()
     config.wifiSSID = "";
     config.wifiPassword = "";
     config.serverIP = "";
-    config.serverPort = 80;
-    config.serverPath = "/ws";
+    config.serverPort;
+    config.serverPath = "";
     config.serverToken = "";
     config.webUsername = "admin";
     config.webPassword = "admin123";
@@ -424,8 +425,8 @@ bool loadConfig()
   config.wifiSSID = doc["wifiSSID"] | "";
   config.wifiPassword = doc["wifiPassword"] | "";
   config.serverIP = doc["serverIP"] | "";
-  config.serverPort = doc["serverPort"] | 80;
-  config.serverPath = doc["serverPath"] | "/ws";
+  config.serverPort = doc["serverPort"];
+  config.serverPath = doc["serverPath"] | "/";
   config.serverToken = doc["serverToken"] | "";
   config.webUsername = doc["webUsername"] | "admin";
   config.webPassword = doc["webPassword"] | "admin123";
@@ -455,7 +456,7 @@ bool loadConfig()
   Serial.println("   Password: '" + config.webPassword + "'");
   Serial.printf("   Mode: %s (%d)\n", config.commMode == MODE_MQTT ? "MQTT" : "WebSocket", (int)config.commMode);
 
-  return true; // ← INI YANG PENTING! RETURN TRUE SAAT BERHASIL
+  return true;
 }
 
 bool saveConfig()
@@ -486,56 +487,49 @@ bool saveConfig()
 // ==================== LCD ====================
 void updateLCD()
 {
-    lcd.clear();
-
-    if (remoteConnected)
+  lcd.clear();
+  if (remoteConnected)
+  {
+    int startOutput = (lcdOutputPage * 4) + 1; 
+    
+    lcd.setCursor(0, 0);
+    for (int i = 0; i < 2; i++) {
+      int ch = startOutput + i;
+      if (ch <= TOTAL_OUTPUTS) {
+        char buf[8];
+        sprintf(buf, "Q%d:%d, ", ch, outputs[ch-1].state ? 1 : 0);
+        lcd.print(buf);
+      }
+    }
+    
+    lcd.setCursor(0, 1);
+    for (int i = 2; i < 4; i++) {
+      int ch = startOutput + i;
+      if (ch <= TOTAL_OUTPUTS) {
+        char buf[8]; 
+        sprintf(buf, "Q%d:%d, ", ch, outputs[ch-1].state ? 1 : 0);
+        lcd.print(buf);
+      }
+    }
+  }
+  else
+  {
+    lcd.setCursor(0, 0);
+    if (wifiConnected)
     {
-        
-        int startOutput = (lcdOutputPage * 4) + 1; 
-        
-        // --- BARIS 1 (Output +0, +1) ---
-        lcd.setCursor(0, 0);
-        for (int i = 0; i < 2; i++) { // 2 output per baris
-            int ch = startOutput + i;
-            if (ch <= TOTAL_OUTPUTS) {
-                // Format Anda: "Q10:0, " (7 karakter)
-                char buf[8]; // Butuh 8 untuk 7 karakter + null
-                sprintf(buf, "Q%d:%d, ", ch, outputs[ch-1].state ? 1 : 0);
-                lcd.print(buf);
-            }
-        }
-        
-        // --- BARIS 2 (Output +2, +3) ---
-        lcd.setCursor(0, 1);
-        for (int i = 2; i < 4; i++) { // 2 output per baris
-            int ch = startOutput + i;
-            if (ch <= TOTAL_OUTPUTS) {
-                char buf[8]; 
-                sprintf(buf, "Q%d:%d, ", ch, outputs[ch-1].state ? 1 : 0);
-                lcd.print(buf);
-            }
-        }
+      lcd.print("IP:");
+      lcd.print(WiFi.localIP().toString());
     }
     else
     {
-        // === MODE OFFLINE: TAMPILKAN STATUS KONFIGURASI ===
-        lcd.setCursor(0, 0);
-        if (wifiConnected)
-        {
-            lcd.print("IP:");
-            lcd.print(WiFi.localIP().toString());
-        }
-        else
-        {
-            lcd.print("AP:");
-            lcd.print(WiFi.softAPIP().toString());
-        }
-
-        lcd.setCursor(0, 1);
-        String mode = (config.commMode == MODE_MQTT) ? "MQTT" : "WS";
-        lcd.print(mode + ": ");
-        lcd.print("NOT CONNECTED");
+      lcd.print("AP:");
+      lcd.print(WiFi.softAPIP().toString());
     }
+    lcd.setCursor(0, 1);
+    String mode = (config.commMode == MODE_MQTT) ? "MQTT" : "WS";
+    lcd.print(mode + ": ");
+    lcd.print("NOT CONNECTED");
+  }
 }
 
 // ==================== MODE SWITCHING ====================
@@ -756,10 +750,146 @@ void mqttCallback(char *topic, byte *payload, unsigned int length)
     message += (char)payload[i];
   }
 
-  Serial.printf("MQTT [%s]: %s\n", topic, message.c_str());
+  String topicStr = String(topic);
+  Serial.println();
+  Serial.printf(" MQTT Message Received\n");
+  Serial.printf("   Topic: %s\n", topic);
+  Serial.printf("   Data : %s\n", message.c_str());
 
-  // Process command
-  processCommand(message, "MQTT");
+  // ========== THINGSBOARD RPC ==========
+  if (topicStr.startsWith("v1/devices/me/rpc/request/"))
+  {
+    Serial.println("🔧 Type: ThingsBoard RPC");
+    
+    // Extract request ID
+    int lastSlash = topicStr.lastIndexOf('/');
+    String requestId = topicStr.substring(lastSlash + 1);
+    Serial.println("   Request ID: " + requestId);
+
+    StaticJsonDocument<512> doc;
+    if (deserializeJson(doc, message) != DeserializationError::Ok)
+    {
+      Serial.println(" JSON Parse Error");
+      return;
+    }
+
+    String method = doc["method"].as<String>();
+    Serial.println("   Method: " + method);
+
+    StaticJsonDocument<256> response;
+    bool success = false;
+
+    if (method == "setValue")
+    {
+      JsonObject params = doc["params"];
+      int channel = params["channel"] | 0;
+      bool state = params["state"] | false;
+
+      Serial.printf("   Action: Set CH%d to %s\n", channel, state ? "ON" : "OFF");
+
+      if (channel >= 1 && channel <= TOTAL_OUTPUTS)
+      {
+        setOutput(channel, state);
+        response["result"] = "OK";
+        response["channel"] = channel;
+        response["state"] = state;
+        success = true;
+      }
+      else
+      {
+        response["error"] = "Invalid channel (1-20)";
+      }
+    }
+    // ===== COMMAND: getValues =====
+    else if (method == "getValues")
+    {
+      Serial.println("   Action: Get all channel status");
+      
+      JsonObject outputs_obj = response.createNestedObject("outputs");
+      for (int i = 0; i < TOTAL_OUTPUTS; i++)
+      {
+        String key = "CH" + String(i + 1);
+        outputs_obj[key] = outputs[i].state ? 1 : 0;
+      }
+      success = true;
+    }
+    // ===== COMMAND: setAutoMode =====
+    else if (method == "setAutoMode")
+    {
+      JsonObject params = doc["params"];
+      int channel = params["channel"] | 0;
+      bool autoMode = params["enabled"] | false;
+      int intervalOn = params["intervalOn"] | 5;
+      int intervalOff = params["intervalOff"] | 5;
+
+      Serial.printf("   Action: Set CH%d AutoMode=%s (ON:%ds OFF:%ds)\n", 
+                    channel, autoMode ? "true" : "false", intervalOn, intervalOff);
+
+      if (channel >= 1 && channel <= TOTAL_OUTPUTS)
+      {
+        int idx = channel - 1;
+        outputs[idx].autoMode = autoMode;
+        outputs[idx].intervalOn = intervalOn * 1000;
+        outputs[idx].intervalOff = intervalOff * 1000;
+        outputs[idx].lastToggle = millis();
+
+        rebuildSyncGroups();
+
+        response["result"] = "OK";
+        response["channel"] = channel;
+        response["autoMode"] = autoMode;
+        success = true;
+      }
+      else
+      {
+        response["error"] = "Invalid channel (1-20)";
+      }
+    }
+    else if (method == "restart")
+    {
+      Serial.println("   Action: Restarting ESP32...");
+      
+      response["result"] = "Restarting...";
+      success = true;
+
+      // Send response first
+      String responseTopic = "v1/devices/me/rpc/response/" + requestId;
+      String responseJson;
+      serializeJson(response, responseJson);
+      mqttClient.publish(responseTopic.c_str(), responseJson.c_str());
+
+      delay(1000);
+      ESP.restart();
+      return;
+    }
+    else
+    {
+      Serial.println("   Unknown method!");
+      response["error"] = "Unknown method: " + method;
+    }
+
+    // Send RPC response
+    String responseTopic = "v1/devices/me/rpc/response/" + requestId;
+    String responseJson;
+    serializeJson(response, responseJson);
+    
+    mqttClient.publish(responseTopic.c_str(), responseJson.c_str());
+
+    Serial.println(" Response sent:");
+    Serial.println("   " + responseJson);
+
+    // Publish updated telemetry if success
+    if (success)
+    {
+      delay(100);
+      mqttPublish();
+    }
+  }
+  else
+  {
+    Serial.println(" Type: Standard MQTT Command");
+    processCommand(message, "MQTT");
+  }
 }
 
 void mqttPublish()
@@ -767,10 +897,43 @@ void mqttPublish()
   if (!remoteConnected)
     return;
 
-  String json = getRemoteStatusJSON();
+  String topic;
+  String json;
 
-  mqttClient.publish(config.serverPath.c_str(), json.c_str());
-  Serial.println("MQTT Published");
+  bool isThingsBoard = (config.serverToken.length() > 0);
+
+  if (isThingsBoard)
+  {
+    StaticJsonDocument<1024> doc;
+  
+    for (int i = 0; i < TOTAL_OUTPUTS; i++)
+    {
+      String key = "Q" + String(i + 1);
+      doc[key] = outputs[i].state ? 1 : 0;
+    }
+
+    serializeJson(doc, json);
+    topic = "v1/devices/me/telemetry";
+  }
+  else
+  {
+    json = getRemoteStatusJSON();
+    topic = config.serverPath;
+  }
+
+  // Publish
+  bool published = mqttClient.publish(topic.c_str(), json.c_str());
+
+  if (published)
+  {
+    Serial.println(" Published:");
+    Serial.println("   Topic: " + topic);
+    Serial.println("   Data : " + json);
+  }
+  else
+  {
+    Serial.println(" Publish failed!");
+  }
 }
 
 void mqttReconnect()
@@ -785,10 +948,16 @@ void mqttReconnect()
 
   String clientId = "ESP32-" + String(random(0xffff), HEX);
 
+  bool isThingsBoard = (config.serverToken.length() > 0);
   bool connected = false;
-  if (config.serverToken.length() > 0)
+
+  if (isThingsBoard)
   {
-    connected = mqttClient.connect(clientId.c_str(), "", config.serverToken.c_str());
+    connected = mqttClient.connect(
+      clientId.c_str(),
+      config.serverToken.c_str(),
+      NULL 
+    );
   }
   else
   {
@@ -797,27 +966,72 @@ void mqttReconnect()
 
   if (connected)
   {
-    Serial.println("OK");
+    Serial.println(" MQTT CONNECTED!");
     remoteConnected = true;
     isRemoteReconnecting = false;
 
-    // Subscribe to control topic
-    String controlTopic = config.serverPath + "/control";
-    mqttClient.subscribe(controlTopic.c_str());
-    Serial.printf("Subscribed to: %s\n", controlTopic.c_str());
+    if (isThingsBoard)
+    {
+      mqttClient.subscribe("v1/devices/me/rpc/request/+");
+      mqttClient.subscribe("v1/devices/me/attributes");
+      
+      Serial.println(" Subscribed to:");
+      Serial.println("   • v1/devices/me/rpc/request/+");
+      Serial.println("   • v1/devices/me/attributes");
+    }
+    else
+    {
+      String controlTopic = config.serverPath + "/control";
+      mqttClient.subscribe(controlTopic.c_str());
+      
+      Serial.println("Subscribed to:");
+      Serial.printf("   • %s\n", controlTopic.c_str());
+    }
 
     mqttPublish();
+    
     lcdOutputPage = 0;
-    updateLCD(); 
+    updateLCD();
     lastLcdPageSwap = millis();
     lcdNeedsRedraw = true;
   }
   else
   {
-    Serial.printf("FAIL (rc=%d)\n", mqttClient.state());
-    remoteConnected = false;
+    Serial.println(" CONNECTION FAILED!");
+    Serial.printf("   Error Code: %d\n", mqttClient.state());
+    Serial.println();
+    Serial.println("    Error Reference:");
+    Serial.println("   -4 = Connection timeout");
+    Serial.println("   -3 = Connection lost");
+    Serial.println("   -2 = Connect failed");
+    Serial.println("   -1 = Disconnected");
+    Serial.println("    1 = Bad protocol version");
+    Serial.println("    2 = ID rejected");
+    Serial.println("    3 = Server unavailable");
+    Serial.println("    4 = Bad credentials");
+    Serial.println("    5 = Unauthorized");
+    Serial.println();
+    Serial.println("    Troubleshooting:");
     
-    updateLCD(); 
+    if (isThingsBoard)
+    {
+      Serial.println("   ✓ Check Access Token is correct");
+      Serial.println("   ✓ Check device exists in ThingsBoard");
+      Serial.println("   ✓ Server should be: mqtt.thingsboard.cloud");
+      Serial.println("   ✓ Port should be: 1883");
+    }
+    else
+    {
+      Serial.println("   ✓ Check MQTT broker is running");
+      Serial.println("   ✓ Check broker allows anonymous connection");
+      Serial.println("   ✓ Check server IP and port");
+      Serial.println("   ✓ Try: test.mosquitto.org:1883");
+    }
+    
+    Serial.println("========================================\n");
+
+    remoteConnected = false;
+    updateLCD();
     lastLcdPageSwap = millis();
     lcdNeedsRedraw = true;
   }
@@ -1776,7 +1990,7 @@ void loop()
     }
   }
 
-  // Process Sync Groups (auto mode yang synchronized)
+  // Process Sync Groups
   processSyncGroups();
 
   // Update LCD
